@@ -1,0 +1,2 @@
+DEBUG:root:studio.py: config file is config/test_11cells.xml
+ERROR:root:config_file is NOT valid: config/test_11cells.xml
