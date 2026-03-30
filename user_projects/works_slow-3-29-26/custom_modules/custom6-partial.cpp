@@ -137,13 +137,11 @@ void create_cell_types( void )
 	// cell_defaults.functions.update_phenotype = phenotype_function; 
 
 	// cell_defaults.functions.custom_cell_rule = custom_function;   // do every mechanics dt
-	// cell_defaults.functions.custom_cell_rule = custom_cell_rule;   // do every mechanics dt
-	cell_defaults.functions.custom_cell_rule = custom_cell_rule_slow;   // do every mechanics dt
+	cell_defaults.functions.custom_cell_rule = custom_cell_rule;   // do every mechanics dt
 
 	// cell_defaults.functions.contact_function = contact_function; 
 
 	cell_defaults.functions.update_velocity = custom_update_cell_velocity;
-	// cell_defaults.functions.update_velocity = rwh_standard_update_cell_velocity;
 
     // rwh: simple test - hard-coded division direction
     // cell_defaults.functions.cell_division_direction_function = custom_division_dir_function; 
@@ -292,184 +290,6 @@ std::vector<std::string> my_coloring_function( Cell* pCell )
 
 		// // update positions 
 
-// void Cell::add_potentials(Cell* other_agent)
-double previous_time;
-void add_potentials_monolayer(Cell* pCell, Cell* other_agent)
-{
-    static bool got_ID0 = false;
-	if( pCell == other_agent )
-	{ return; }
-
-    // do this weird bug fix for double counting; figure out why later
-    if ((pCell->ID == 0) && got_ID0 && (previous_time == PhysiCell_globals.current_time)) return;
-	if( pCell->ID == 0 )
-    {
-        previous_time = PhysiCell_globals.current_time;
-        got_ID0 = true;
-    }
-
-	// 12 uniform neighbors at a close packing distance, after dividing out all constants
-	// static double simple_pressure_scale = 0.027288820670331; // 12 * (1 - sqrt(pi/(2*sqrt(3))))^2 
-	// 9.820170012151277; // 12 * ( 1 - sqrt(2*pi/sqrt(3)))^2
-
-	double distance = 0; 
-	// for( int i = 0 ; i < 3 ; i++ ) 
-	for( int i = 0 ; i < 2 ; i++ ) 
-	{ 
-		pCell->displacement[i] = pCell->position[i] - (*other_agent).position[i]; 
-		distance += pCell->displacement[i] * pCell->displacement[i]; 
-	}
-	// Make sure that the distance is not zero
-	
-	distance = std::max(sqrt(distance), 0.00001); 
-	
-	//Repulsive
-	double R = pCell->phenotype.geometry.radius+ (*other_agent).phenotype.geometry.radius; 
-	
-	// double RN = phenotype.geometry.nuclear_radius + (*other_agent).phenotype.geometry.nuclear_radius;	
-	double temp_r, c;
-	if( distance > R ) 
-	{
-		temp_r=0;
-	}
-	// else if( distance < RN ) 
-	// {
-		// double M = 1.0; 
-		// c = 1.0 - RN/R; 
-		// c *= c; 
-		// c -= M; 
-		// temp_r = ( c*distance/RN  + M  ); 
-	// }
-	else
-	{
-		// temp_r = 1 - distance/R;
-		temp_r = -distance; // -d
-		temp_r /= R; // -d/R
-		temp_r += 1.0; // 1-d/R
-		temp_r *= temp_r; // (1-d/R)^2 
-
-
-        pCell->custom_data["num_nbrs"] += 1;
-        // if (PhysiCell_globals.current_time < 443.01)
-        if (PhysiCell_globals.current_time < 1030.)
-            std::cout << __FUNCTION__ << " ~~~ t= "<<PhysiCell_globals.current_time << ": pCell=" << pCell <<", (current voxel) ID= " << pCell->ID<< ",  other_agent ID=" << other_agent->ID << ", pCell num_nbrs= "<< pCell->custom_data["num_nbrs"] << std::endl;
-		
-		// add the relative pressure contribution 
-		// state.simple_pressure += ( temp_r / simple_pressure_scale ); // New July 2017 
-	}
-	
-	// August 2017 - back to the original if both have same coefficient 
-
-	double effective_repulsion = std::sqrt( pCell->phenotype.mechanics.cell_cell_repulsion_strength * other_agent->phenotype.mechanics.cell_cell_repulsion_strength ); 
-	temp_r *= effective_repulsion; 
-	
-	// temp_r *= phenotype.mechanics.cell_cell_repulsion_strength; // original 
-	//////////////////////////////////////////////////////////////////
-	
-	// // Adhesive
-	// //double max_interactive_distance = parameters.max_interaction_distance_factor * phenotype.geometry.radius + 
-	// //	(*other_agent).parameters.max_interaction_distance_factor * (*other_agent).phenotype.geometry.radius;
-		
-	// double max_interactive_distance = pCell->phenotype.mechanics.relative_maximum_adhesion_distance * pCell->phenotype.geometry.radius + 
-	// 	(*other_agent).phenotype.mechanics.relative_maximum_adhesion_distance * (*other_agent).phenotype.geometry.radius;
-		
-	// if(distance < max_interactive_distance ) 
-	// {	
-	// 	// double temp_a = 1 - distance/max_interactive_distance; 
-	// 	double temp_a = -distance; // -d
-	// 	temp_a /= max_interactive_distance; // -d/S
-	// 	temp_a += 1.0; // 1 - d/S 
-	// 	temp_a *= temp_a; // (1-d/S)^2 
-	// 	// temp_a *= phenotype.mechanics.cell_cell_adhesion_strength; // original 
-		
-	// 	// August 2017 - back to the original if both have same coefficient 
-	// 	// May 2022 - back to oriinal if both affinities are 1
-	// 	int ii = find_cell_definition_index( pCell->type ); 
-	// 	int jj = find_cell_definition_index( other_agent->type ); 
-
-	// 	double adhesion_ii = pCell->phenotype.mechanics.cell_cell_adhesion_strength * pCell->phenotype.mechanics.cell_adhesion_affinities[jj]; 
-	// 	double adhesion_jj = other_agent->phenotype.mechanics.cell_cell_adhesion_strength * other_agent->phenotype.mechanics.cell_adhesion_affinities[ii]; 
-
-	// 	// double effective_adhesion = sqrt( phenotype.mechanics.cell_cell_adhesion_strength * other_agent->phenotype.mechanics.cell_cell_adhesion_strength ); 
-	// 	double effective_adhesion = std::sqrt( adhesion_ii*adhesion_jj ); 
-	// 	temp_a *= effective_adhesion; 
-		
-	// 	temp_r -= temp_a;
-
-	// 	pCell->state.neighbors.push_back(other_agent); // move here in 1.10.2 so non-adhesive cells also added. 
-	// }
-	/////////////////////////////////////////////////////////////////
-	if( fabs(temp_r) < 1e-16 )
-	{ return; }
-	temp_r /= distance;
-	// for( int i = 0 ; i < 3 ; i++ ) 
-	// {
-	//	velocity[i] += displacement[i] * temp_r; 
-	// }
-	axpy( &(pCell->velocity) , temp_r , pCell->displacement ); 
-	
-	
-	// state.neighbors.push_back(other_agent); // new 1.8.0
-	
-	return;
-}
-
-void rwh_standard_update_cell_velocity( Cell* pCell, Phenotype& phenotype, double dt)
-{
-	// if( pCell->functions.add_cell_basement_membrane_interactions )
-	// {
-	// 	pCell->functions.add_cell_basement_membrane_interactions(pCell, phenotype,dt);
-	// }
-	
-	// pCell->state.simple_pressure = 0.0; 
-	pCell->state.neighbors.clear(); // new 1.8.0
-
-    pCell->custom_data["num_nbrs"] = 0;
-	
-	//First check the neighbors in my current voxel
-	std::vector<Cell*>::iterator neighbor;
-	std::vector<Cell*>::iterator end = pCell->get_container()->agent_grid[pCell->get_current_mechanics_voxel_index()].end();
-	for(neighbor = pCell->get_container()->agent_grid[pCell->get_current_mechanics_voxel_index()].begin(); neighbor != end; ++neighbor)
-	{
-		add_potentials_monolayer(pCell, *neighbor);
-        // Cell* pN = std::to_address(neighbor);
-        // Cell* pN = &neighbor;
-        Cell* pN = *neighbor;
-        // std::cout << __FUNCTION__ << "  t= "<<PhysiCell_globals.current_time << ": (current voxel) ID= " << pCell->ID<< ",  neighbor ID=" << pN->ID << ", pCell num_nbrs= "<< pCell->custom_data["num_nbrs"] << std::endl;
-                // if (fabs( - 120.0) < 1.e-4)
-	}
-	std::vector<int>::iterator neighbor_voxel_index;
-	std::vector<int>::iterator neighbor_voxel_index_end = 
-		pCell->get_container()->underlying_mesh.moore_connected_voxel_indices[pCell->get_current_mechanics_voxel_index()].end();
-
-	for( neighbor_voxel_index = 
-		pCell->get_container()->underlying_mesh.moore_connected_voxel_indices[pCell->get_current_mechanics_voxel_index()].begin();
-		neighbor_voxel_index != neighbor_voxel_index_end; 
-		++neighbor_voxel_index )
-	{
-		if(!is_neighbor_voxel(pCell, pCell->get_container()->underlying_mesh.voxels[pCell->get_current_mechanics_voxel_index()].center, pCell->get_container()->underlying_mesh.voxels[*neighbor_voxel_index].center, *neighbor_voxel_index))
-			continue;
-		end = pCell->get_container()->agent_grid[*neighbor_voxel_index].end();
-		for(neighbor = pCell->get_container()->agent_grid[*neighbor_voxel_index].begin();neighbor != end; ++neighbor)
-		{
-            Cell* pN = *neighbor;
-            // rwh_standard_update_cell_velocity  t= 0: (current voxel) ID= 0,  neighbor ID=0, pCell num_nbrs= 1
-            // if (PhysiCell_globals.current_time < 0.03)
-            if (PhysiCell_globals.current_time > 1030.)
-                std::cout << __FUNCTION__ << "  t= "<<PhysiCell_globals.current_time << ": (outer voxel) ID= " << pCell->ID<< ",  neighbor ID=" << pN->ID << ", pCell num_nbrs= "<< pCell->custom_data["num_nbrs"] << std::endl;
-
-			add_potentials_monolayer(pCell, *neighbor);
-            if (PhysiCell_globals.current_time > 1030.)
-                std::cout << "      -- after add_potentials_monolayer(): (outer voxel) ID= " << pCell->ID<< ",  neighbor ID=" << pN->ID << ", pCell num_nbrs= "<< pCell->custom_data["num_nbrs"] << std::endl;
-		}
-	}
-
-	// pCell->update_motility_vector(dt); 
-	// pCell->velocity += phenotype.motility.motility_vector; 
-	
-	return; 
-}
-
 // do every mechanics dt
 void custom_update_cell_velocity( Cell* pCell, Phenotype& phenotype, double dt )
 {
@@ -515,11 +335,9 @@ void custom_update_cell_velocity( Cell* pCell, Phenotype& phenotype, double dt )
         static double pi = 3.1415926535897932384626433832795; 
         static double one_div_pi = 0.31830989; 
 
-    // pCell->custom_data["num_nbrs"] = 0;
         for( auto pNeighbor : *PhysiCell::all_cells )   // rwh: optimize
         {
             if( pNeighbor == pCell ) continue;
-
 
             double r_b = pNeighbor->phenotype.geometry.radius;
             double rest_length = r_a + r_b;
@@ -535,7 +353,6 @@ void custom_update_cell_velocity( Cell* pCell, Phenotype& phenotype, double dt )
             // Vector from A (pCell) toward B (pNeighbor)
             double dx = pNeighbor->position[0] - pCell->position[0];
             double dy = pNeighbor->position[1] - pCell->position[1];
-            double dz = 0.; // pNeighbor->position[2] - pCell->position[2];
             //jdouble distance = std::sqrt( dx*dx + dy*dy + dz*dz );
             double distance = std::sqrt( dx*dx + dy*dy);
 
@@ -558,7 +375,6 @@ void custom_update_cell_velocity( Cell* pCell, Phenotype& phenotype, double dt )
             }
             else
             {
-                // pCell->custom_data["num_nbrs"] += 1;   // now performed in custom_cell_rule[_slow], after update_pos
                 // Repulsion branch: overlap/rest_length in (-1, 0)
                 // log argument in (0, 1) -> magnitude < 0 -> force points away from B
 
@@ -574,7 +390,7 @@ void custom_update_cell_velocity( Cell* pCell, Phenotype& phenotype, double dt )
                 // pCell->velocity[2] = 0.0;
             }
 
-            if( false )  // <--------------------- argh, NOTE!
+            if( false )
             {
 
             // ----------  compute f_i and a_i
@@ -595,12 +411,12 @@ void custom_update_cell_velocity( Cell* pCell, Phenotype& phenotype, double dt )
             // double beta = 0.0;
 
             // pCell->custom_data["num_nbrs"] = pCell->state.neighbors.size();   // new: Nov 4 '25
-            // pCell->custom_data["num_nbrs"] = 0;
+            pCell->custom_data["num_nbrs"] = 0;
 
             // if (d < r1+r2)
-            if (distance <= rest_length)  // < or <= ?
+            if (distance < rest_length)
             {
-                // pCell->custom_data["num_nbrs"] += 1;
+                pCell->custom_data["num_nbrs"] += 1;
                 // phi_ij = ( d_ij*d_ij - r_j*r_j + r_i*r_i ) / (2 * d_ij * r_i)
                 double phi = (distance*distance - r_b*r_b + ra_2 ) / (2 * distance * r_a);
                 // f_i = 1.0 - 1.0/np.pi * np.sqrt( 1.0 - phi_ij*phi_ij )   # for all nbrs j:  1 - 1/pi * SUM_j (sqrt(1 - phi_ij)
@@ -628,9 +444,7 @@ void custom_update_cell_velocity( Cell* pCell, Phenotype& phenotype, double dt )
 }
 
 // do every mechanics dt
-// void custom_function( Cell* pCell, Phenotype& phenotype, double dt )
-// NOTE: this is called in the container *before* update_positions!
-void custom_cell_rule_slow( Cell* pCell, Phenotype& phenotype, double dt )
+void custom_cell_rule( Cell* pCell, Phenotype& phenotype, double dt )
 {
     // std::cout << __FUNCTION__ << ": " << PhysiCell_globals.current_time << ": cell ID= " << pCell->ID << std::endl;
 
@@ -719,29 +533,299 @@ void custom_cell_rule_slow( Cell* pCell, Phenotype& phenotype, double dt )
     if (beta < 0.0)  beta = 0.0;
     pCell->custom_data["a_i"] = beta;
 
-    // pCell->custom_data["growth_rate"] = parameters.doubles("growth_rate");  // OLD
-
-    // ------rwh: don't need to do this for the 1000 cell, no contact inhibition model!
-    pCell->custom_data["arrest_cycle"] =  0.0;  // rwh: improve?
-    pCell->custom_data["beta_or_gamma"] = 0;
-    if (beta < beta_threshold)
     {
-        pCell->custom_data["arrest_cycle"] =  1.0;  // rwh: improve?
-        pCell->custom_data["beta_or_gamma"] += 1;
-    }
-    if (gamma < gamma_threshold)
-    {
-        pCell->custom_data["arrest_cycle"] =  1.0;  // rwh: improve?
-        pCell->custom_data["beta_or_gamma"] += 2;
+        // ------rwh: don't need to do this for the 1000 cell, no contact inhibition model!
+        pCell->custom_data["arrest_cycle"] =  0.0;  // rwh: improve?
+        pCell->custom_data["beta_or_gamma"] = 0;
+        if (beta < beta_threshold)
+        {
+            pCell->custom_data["arrest_cycle"] =  1.0;  // rwh: improve?
+            pCell->custom_data["beta_or_gamma"] += 1;
+        }
+        if (gamma < gamma_threshold)
+        {
+            pCell->custom_data["arrest_cycle"] =  1.0;  // rwh: improve?
+            pCell->custom_data["beta_or_gamma"] += 2;
+        }
+        return;
     }
 
     return; 
 }
 
+// called from main.cpp whenever data is saved 
+void update_cell_custom_data( void )
+{
+    // std::cout << __FUNCTION__ << ": " << PhysiCell_globals.current_time << ": cell ID= " << pCell->ID << std::endl;
+
+    // static double pi = 3.1415926535897932384626433832795; 
+    constexpr double pi = 3.1415926535897932384626433832795; 
+    // static double one_div_pi = 0.31830989; 
+    constexpr double one_div_pi = 0.31830989; 
+	// static double two_pi = 6.283185307179586476925286766559; 
+
+    if ((*all_cells).size() < 2)
+        return;
+
+    for( auto pC1 : *PhysiCell::all_cells )  // rwh: optimize
+    {
+        pC1->custom_data["cell_ID"] =  pC1->ID;
+        double r1 = pC1->phenotype.geometry.radius;
+
+        // compute gamma, beta for each cell (based on its nbrs)
+        for( auto pC2 : *PhysiCell::all_cells )  
+        {
+            double r2 = pC2->phenotype.geometry.radius;
+            if( pC1 == pC2 ) continue;
+
+            double r_b = pC2->phenotype.geometry.radius;
+            double rest_length = r_a + r_b;
+
+            if(std::abs(pCell->position[0]-pNeighbor->position[0]) > rest_length) continue;
+            else if(std::abs(pCell->position[1]-pNeighbor->position[1]) > rest_length) continue;
+
+            double dx = pC2->position[0] - pC1->position[0];
+            double dy = pC2->position[1] - pC1->position[1];
+            double dz = 0.; // pNeighbor->position[2] - pCell->position[2];
+            //jdouble distance = std::sqrt( dx*dx + dy*dy + dz*dz );
+            double distance = std::sqrt( dx*dx + dy*dy);
+
+            if (distance < rest_length)
+            {
+                pCell->custom_data["num_nbrs"] += 1;
+                // phi_ij = ( d_ij*d_ij - r_j*r_j + r_i*r_i ) / (2 * d_ij * r_i)
+                // double phi = (d*d - r2*r2 + r1_2 ) / (2 * d * r1);
+                double phi = (distance*distance - r_b*r_b + r_a_2 ) / (2 * distance * r_a);
+                // f_i = 1.0 - 1.0/np.pi * np.sqrt( 1.0 - phi_ij*phi_ij )   # for all nbrs j:  1 - 1/pi * SUM_j (sqrt(1 - phi_ij)
+                gamma += sqrt( 1.0 - phi*phi);
+                // if (fabs(PhysiCell_globals.current_time - 120.0) < 1.e-4)
+                //     std::cout << __FUNCTION__ << ": " << PhysiCell_globals.current_time << ": cell ID= " << pCell->ID << ", gamma= " << gamma << std::endl;
+
+                beta += acos(phi) - phi * sqrt(1 - phi*phi);
+            }
+        }
+
+        double gamma_inv = one_div_pi * gamma;     // 1.0/pi * gamma;
+        gamma = 1.0 - gamma_inv;   // free surface fraction
+        if (gamma < 0.0)  gamma = 0.0;
+
+        pCell->custom_data["f_i"] = gamma;
+        // pCell->custom_data["gamma_inv"] = gamma_inv;
+
+        beta = 1.0 - 1.0/pi * beta;
+        // pCell->custom_data["beta"] = 1.0 - 1.0/pi * beta;
+        if (beta < 0.0)  beta = 0.0;
+        pCell->custom_data["a_i"] = beta;
+
+        {
+            // ------rwh: don't need to do this for the 1000 cell, no contact inhibition model!
+            pCell->custom_data["arrest_cycle"] =  0.0;  // rwh: improve?
+            pCell->custom_data["beta_or_gamma"] = 0;
+            if (beta < beta_threshold)
+            {
+                pCell->custom_data["arrest_cycle"] =  1.0;  // rwh: improve?
+                pCell->custom_data["beta_or_gamma"] += 1;
+            }
+            if (gamma < gamma_threshold)
+            {
+                pCell->custom_data["arrest_cycle"] =  1.0;  // rwh: improve?
+                pCell->custom_data["beta_or_gamma"] += 2;
+            }
+        }
+    }
+
+
+    // x_j = x0[idx]
+    // c_i = Circle((x_i, y_i), r_i, edgecolor='r', facecolor='none')
+    // c_j = Circle((x_j, y_j), r_j, edgecolor='r', facecolor='none')
+    // ax[idx].add_patch(c_i)
+    // ax[idx].add_patch(c_j)
+    // ax[idx].set_xlim(-1.5, 2.5)
+    // ax[idx].set_ylim(-1.5, 1.5)
+    // ax[idx].set_aspect('equal', adjustable='box')
+    // #plt.show()
+    
+    // xd = x_j-x_i
+    // yd = y_j-y_i
+    // d_ij = np.sqrt(xd*xd + yd*yd)
+    // # print("d_ij = ",d_ij)
+    // #  *d_ij^2 - r_j^2 + r_i^2) / (2 * d_ij * r_i)
+    // phi_ij = ( d_ij*d_ij - r_j*r_j + r_i*r_i ) / (2 * d_ij * r_i)
+    // # print("phi_ij = ",phi_ij)
+    // # free surface fraction of cell_i  (gamma)
+    // f_i = 1.0 - 1.0/np.pi * np.sqrt( 1.0 - phi_ij*phi_ij )   # for all nbrs j:  1 - 1/pi * SUM_j (sqrt(1 - phi_ij)
+    // # print("f_i = ",f_i)
+    // ax[idx].text(-0.9, 1.2, f'f_i={f_i:.3f}', fontsize = 10)
+    
+    // # A_i/A_i0 = 1 - 1/pi SUM_j ( arccos(phi_ij) - phi_ij * sqrt(1 - phi_ij^2) )    # beta
+    // relative_compressed_size = 1.0 - 1.0/np.pi * (np.arccos(phi_ij) - phi_ij * np.sqrt(1.0 - phi_ij*phi_ij))
+
+    double r1 = phenotype.geometry.radius;
+    double r1_2 = r1*r1;
+    double x1 = (*pCell).position[0];
+    double y1 = (*pCell).position[1];
+    double gamma = 0.0;
+    double beta = 0.0;
+
+	// if( pCell->state.neighbors.size() == 0)  // for all j nbrs
+    // {
+    //     pCell->custom_data["gamma"] = 0.0;
+    //     pCell->custom_data["beta"] = 0.0;
+    //     return;
+    // }
+
+    // pCell->custom_data["num_nbrs"] = pCell->state.neighbors.size();   // new: Nov 4 '25
+    pCell->custom_data["num_nbrs"] = 42;  // rwh - fix
+
+    // std::vector<int> my_nbrs;
+	for( int idx=0; idx<pCell->state.neighbors.size(); idx++ )  // for all j nbrs
+	{
+		Cell* pC = pCell->state.neighbors[idx]; 
+
+        // check for buggy duplicate nbr and skip if present
+        // std::vector<int>::iterator it = std::find(my_nbrs.begin(), my_nbrs.end(), pC->ID);
+        // if (it != my_nbrs.end())
+        //     continue;
+        // my_nbrs.push_back(pC->ID);
+
+        // if (fabs(PhysiCell_globals.current_time - 120.0) < 1.e-4)
+        // {
+        //     // std::cout << __FUNCTION__ << ": " << PhysiCell_globals.current_time << ": cell ID= " << pCell->ID << ", gamma= " << gamma << std::endl;
+        //     std::cout << __FUNCTION__ << " -------- t= " << PhysiCell_globals.current_time << ": cell ID= " << pCell->ID << " has nbr ID= " << pC->ID << std::endl;
+
+        // }
+
+        // compute chord of intersection (if any)
+        // radii of cells
+        double r2 = pC->phenotype.geometry.radius;
+        // centers of cells
+        double x2 = (*pC).position[0];
+        double y2 = (*pC).position[1];
+        double xdiff = x1-x2;
+        double ydiff = y1-y2;
+        double d = sqrt(xdiff*xdiff + ydiff*ydiff);
+        if (d < r1+r2)
+        {
+            // std::cout << "cell " << pCell->ID << " intersects cell " << pC->ID << std::endl;
+            // std::cout << "x1,y1 " << x1 << ", " << y1 << std::endl;
+            // std::cout << "x2,y2 " << x2 << ", " << y2 << std::endl;
+            // std::cout << "  r1,r2 " << r1 << ", " << r2 << std::endl;
+            // std::cout << "cell " << pCell->ID << " intersects cell " << pC->ID << std::endl;
+
+    // phi_ij = ( d_ij*d_ij - r_j*r_j + r_i*r_i ) / (2 * d_ij * r_i)
+    // # print("phi_ij = ",phi_ij)
+    // # free surface fraction of cell_i  (gamma)
+    // f_i = 1.0 - 1.0/np.pi * np.sqrt( 1.0 - phi_ij*phi_ij )   # for all nbrs j:  1 - 1/pi * SUM_j (sqrt(1 - phi_ij)
+    // # print("f_i = ",f_i)
+    // ax[idx].text(-0.9, 1.2, f'f_i={f_i:.3f}', fontsize = 10)
+    
+    // # A_i/A_i0 = 1 - 1/pi * SUM_j ( arccos(phi_ij) - phi_ij * sqrt(1 - phi_ij^2) )    # beta
+    // relative_compressed_size = 1.0 - 1.0/np.pi * (np.arccos(phi_ij) - phi_ij * np.sqrt(1.0 - phi_ij*phi_ij))
+
+            // phi_ij = ( d_ij*d_ij - r_j*r_j + r_i*r_i ) / (2 * d_ij * r_i)
+            double phi = (d*d - r2*r2 + r1_2 ) / (2 * d * r1);
+            // f_i = 1.0 - 1.0/np.pi * np.sqrt( 1.0 - phi_ij*phi_ij )   # for all nbrs j:  1 - 1/pi * SUM_j (sqrt(1 - phi_ij)
+            gamma += sqrt( 1.0 - phi*phi);
+            // if (fabs(PhysiCell_globals.current_time - 120.0) < 1.e-4)
+            //     std::cout << __FUNCTION__ << ": " << PhysiCell_globals.current_time << ": cell ID= " << pCell->ID << ", gamma= " << gamma << std::endl;
+
+            beta += acos(phi) - phi * sqrt(1 - phi*phi);
+        }
+    }
+    // if (fabs(PhysiCell_globals.current_time - 120.0) < 1.e-4)
+    // {
+    //     std::cout << __FUNCTION__ << " ------- t= " << PhysiCell_globals.current_time << ": gamma= " << gamma << std::endl;
+    // }
+    double gamma_inv = one_div_pi * gamma;     // 1.0/pi * gamma;   
+    gamma = 1.0 - gamma_inv;   // free surface fraction
+    if (gamma < 0.0)  gamma = 0.0;
+
+    pCell->custom_data["f_i"] = gamma;
+    // pCell->custom_data["gamma_inv"] = gamma_inv;
+
+    beta = 1.0 - 1.0/pi * beta;
+    // pCell->custom_data["beta"] = 1.0 - 1.0/pi * beta;
+    if (beta < 0.0)  beta = 0.0;
+    pCell->custom_data["a_i"] = beta;
+
+    // beta ~[0,1];  gamma~[0,1] (?)
+    // if ((gamma < 0.025) && (beta > 0.925) )
+    // {
+    //     set_single_behavior( pCell , "cycle entry" , 0.0); 
+    // }
+
+    // std::cout << "-------- gamma= " << gamma << ",  beta= " << beta << std::endl;
+
+    // Decide which value of the 3x3 matrix of param ranges we're running/saving
+    // Inhibition is OR; Growth is AND
+	// if (param_matrix_elm == 3)
+    // {
+    //     set_single_behavior( pCell , "cycle entry" , 0.0);  // arrest the cell cycle, by default
+    //     if ((beta > 0.9) && (gamma > 0.5))  // allow cell cycle/growth/prolif
+    //     {
+    //         // set cycle rate = 0.002257  (duration=443)
+    //         // set_single_behavior( pCell , "cycle entry" , 0.002257); 
+    //         set_single_behavior( pCell , "cycle entry" , 0.01124);  // 1/89
+    //     }
+    //     return;
+    // }
+	// else if (param_matrix_elm == 0)
+    {
+        // set_single_behavior( pCell , "cycle entry" , 0.01124);  // 1/89
+        // set_single_behavior( pCell , "growth_rate" , 5.883);  // 1/89
+        // pCell->custom_data["growth_rate"] = 5.883;
+
+        // pCell->custom_data["growth_rate"] = parameters.doubles("growth_rate");
+        pCell->custom_data["arrest_cycle"] =  0.0;  // rwh: improve?
+
+        pCell->custom_data["beta_or_gamma"] = 0;
+        // if ((beta < 0.9) || (gamma < 0.9))
+        // if ((beta < 0.5) || (gamma < 0.9))
+        // if ((beta < beta_threshold) || (gamma < gamma_threshold))
+        // {
+        //     set_single_behavior( pCell , "cycle entry" , 0.0);  // arrest the cell cycle, by default
+        // }
+        if (beta < beta_threshold)
+        {
+            // set_single_behavior( pCell , "cycle entry" , 0.0);  // arrest the cell cycle, by default
+            // set_single_behavior( pCell , "growth_rate" , 0.0);
+            // pCell->custom_data["growth_rate"] = 0.0;
+            pCell->custom_data["arrest_cycle"] =  1.0;  // rwh: improve?
+            pCell->custom_data["beta_or_gamma"] += 1;
+        }
+        if (gamma < gamma_threshold)
+        {
+            // set_single_behavior( pCell , "cycle entry" , 0.0);  // arrest the cell cycle, by default
+            // set_single_behavior( pCell , "growth_rate" , 0.0);
+            // pCell->custom_data["growth_rate"] = 0.0;
+            pCell->custom_data["arrest_cycle"] =  1.0;  // rwh: improve?
+            pCell->custom_data["beta_or_gamma"] += 2;
+        }
+        return;
+    }
+
+    //-------------
+	// else if (param_matrix_elm == 0)
+    // {
+    //     // set_single_behavior( pCell , "cycle entry" , 0.0);  // arrest the cell cycle, by default
+    //     set_single_behavior( pCell , "cycle entry" , 0.01124);  // 1/89
+    //     // set_single_behavior( pCell , "cycle entry" , 0.01124);  // allow growth, by default (=1/89)
+    //     // if ((beta < 0.8) && (gamma < 0.8))  // arrest growth
+    //     // if ((beta < 0.8) && (gamma < 0.8))  // arrest growth
+    //     // if ((beta > 0.6) && (gamma > 0.6))
+    //     if ((beta < 0.9) || (gamma < 0.9))
+    //     {
+    //         // set_single_behavior( pCell , "cycle entry" , 0.0);  
+    //         // set_single_behavior( pCell , "cycle entry" , 0.01124);  // 1/89
+    //         set_single_behavior( pCell , "cycle entry" , 0.0);  // arrest the cell cycle, by default
+    //     }
+    //     return;
+    // }
+    return; 
+}
+
 // do every mechanics dt
-// void custom_function_v0( Cell* pCell, Phenotype& phenotype, double dt )
-// void custom_cell_rule_v0( Cell* pCell, Phenotype& phenotype, double dt )
-void custom_cell_rule( Cell* pCell, Phenotype& phenotype, double dt )
+void custom_function_v0( Cell* pCell, Phenotype& phenotype, double dt )
 {
     // std::cout << __FUNCTION__ << ": " << PhysiCell_globals.current_time << ": cell ID= " << pCell->ID << std::endl;
 
@@ -794,7 +878,7 @@ void custom_cell_rule( Cell* pCell, Phenotype& phenotype, double dt )
     // }
 
     // pCell->custom_data["num_nbrs"] = pCell->state.neighbors.size();   // new: Nov 4 '25
-    pCell->custom_data["num_nbrs"] = 0;
+    pCell->custom_data["num_nbrs"] = 42;  // rwh - fix
 
     // std::vector<int> my_nbrs;
 	for( int idx=0; idx<pCell->state.neighbors.size(); idx++ )  // for all j nbrs
@@ -822,16 +906,9 @@ void custom_cell_rule( Cell* pCell, Phenotype& phenotype, double dt )
         double y2 = (*pC).position[1];
         double xdiff = x1-x2;
         double ydiff = y1-y2;
-        double d = std::sqrt(xdiff*xdiff + ydiff*ydiff);
-        // std::cout << __FUNCTION__ << " -------- t= " << PhysiCell_globals.current_time << ": cell ID= " << pCell->ID << " has nbr ID= " << pC->ID << std::endl;
-
-        if (PhysiCell_globals.current_time < 443.03)
-            std::cout << __FUNCTION__ << " -------- t= " << PhysiCell_globals.current_time << ": d= " << d << " r1+r2= " << (r1+r2) << std::endl;
+        double d = sqrt(xdiff*xdiff + ydiff*ydiff);
         if (d < r1+r2)
         {
-            if (PhysiCell_globals.current_time  < 443.03)
-                std::cout << __FUNCTION__ << "  (d < r1+r2): --- t= " << PhysiCell_globals.current_time << ": d= " << d << " r1+r2= " << (r1+r2) << std::endl;
-            pCell->custom_data["num_nbrs"] += 1;
             // std::cout << "cell " << pCell->ID << " intersects cell " << pC->ID << std::endl;
             // std::cout << "x1,y1 " << x1 << ", " << y1 << std::endl;
             // std::cout << "x2,y2 " << x2 << ", " << y2 << std::endl;
@@ -882,68 +959,73 @@ void custom_cell_rule( Cell* pCell, Phenotype& phenotype, double dt )
 
     // std::cout << "-------- gamma= " << gamma << ",  beta= " << beta << std::endl;
 
-    // set_single_behavior( pCell , "cycle entry" , 0.01124);  // 1/89
-    // set_single_behavior( pCell , "growth_rate" , 5.883);  // 1/89
-    // pCell->custom_data["growth_rate"] = 5.883;
-
-    // pCell->custom_data["growth_rate"] = parameters.doubles("growth_rate");
-    pCell->custom_data["arrest_cycle"] =  0.0;  // rwh: improve?
-
-    pCell->custom_data["beta_or_gamma"] = 0;
-    // if ((beta < 0.9) || (gamma < 0.9))
-    // if ((beta < 0.5) || (gamma < 0.9))
-    // if ((beta < beta_threshold) || (gamma < gamma_threshold))
+    // Decide which value of the 3x3 matrix of param ranges we're running/saving
+    // Inhibition is OR; Growth is AND
+	// if (param_matrix_elm == 3)
     // {
     //     set_single_behavior( pCell , "cycle entry" , 0.0);  // arrest the cell cycle, by default
+    //     if ((beta > 0.9) && (gamma > 0.5))  // allow cell cycle/growth/prolif
+    //     {
+    //         // set cycle rate = 0.002257  (duration=443)
+    //         // set_single_behavior( pCell , "cycle entry" , 0.002257); 
+    //         set_single_behavior( pCell , "cycle entry" , 0.01124);  // 1/89
+    //     }
+    //     return;
     // }
-    if (beta < beta_threshold)
+	// else if (param_matrix_elm == 0)
     {
-        // set_single_behavior( pCell , "cycle entry" , 0.0);  // arrest the cell cycle, by default
-        // set_single_behavior( pCell , "growth_rate" , 0.0);
-        // pCell->custom_data["growth_rate"] = 0.0;
-        pCell->custom_data["arrest_cycle"] =  1.0;  // rwh: improve?
-        pCell->custom_data["beta_or_gamma"] += 1;
+        // set_single_behavior( pCell , "cycle entry" , 0.01124);  // 1/89
+        // set_single_behavior( pCell , "growth_rate" , 5.883);  // 1/89
+        // pCell->custom_data["growth_rate"] = 5.883;
+
+        // pCell->custom_data["growth_rate"] = parameters.doubles("growth_rate");
+        pCell->custom_data["arrest_cycle"] =  0.0;  // rwh: improve?
+
+        pCell->custom_data["beta_or_gamma"] = 0;
+        // if ((beta < 0.9) || (gamma < 0.9))
+        // if ((beta < 0.5) || (gamma < 0.9))
+        // if ((beta < beta_threshold) || (gamma < gamma_threshold))
+        // {
+        //     set_single_behavior( pCell , "cycle entry" , 0.0);  // arrest the cell cycle, by default
+        // }
+        if (beta < beta_threshold)
+        {
+            // set_single_behavior( pCell , "cycle entry" , 0.0);  // arrest the cell cycle, by default
+            // set_single_behavior( pCell , "growth_rate" , 0.0);
+            // pCell->custom_data["growth_rate"] = 0.0;
+            pCell->custom_data["arrest_cycle"] =  1.0;  // rwh: improve?
+            pCell->custom_data["beta_or_gamma"] += 1;
+        }
+        if (gamma < gamma_threshold)
+        {
+            // set_single_behavior( pCell , "cycle entry" , 0.0);  // arrest the cell cycle, by default
+            // set_single_behavior( pCell , "growth_rate" , 0.0);
+            // pCell->custom_data["growth_rate"] = 0.0;
+            pCell->custom_data["arrest_cycle"] =  1.0;  // rwh: improve?
+            pCell->custom_data["beta_or_gamma"] += 2;
+        }
+        return;
     }
-    if (gamma < gamma_threshold)
-    {
-        // set_single_behavior( pCell , "cycle entry" , 0.0);  // arrest the cell cycle, by default
-        // set_single_behavior( pCell , "growth_rate" , 0.0);
-        // pCell->custom_data["growth_rate"] = 0.0;
-        pCell->custom_data["arrest_cycle"] =  1.0;  // rwh: improve?
-        pCell->custom_data["beta_or_gamma"] += 2;
-    }
+
+    //-------------
+	// else if (param_matrix_elm == 0)
+    // {
+    //     // set_single_behavior( pCell , "cycle entry" , 0.0);  // arrest the cell cycle, by default
+    //     set_single_behavior( pCell , "cycle entry" , 0.01124);  // 1/89
+    //     // set_single_behavior( pCell , "cycle entry" , 0.01124);  // allow growth, by default (=1/89)
+    //     // if ((beta < 0.8) && (gamma < 0.8))  // arrest growth
+    //     // if ((beta < 0.8) && (gamma < 0.8))  // arrest growth
+    //     // if ((beta > 0.6) && (gamma > 0.6))
+    //     if ((beta < 0.9) || (gamma < 0.9))
+    //     {
+    //         // set_single_behavior( pCell , "cycle entry" , 0.0);  
+    //         // set_single_behavior( pCell , "cycle entry" , 0.01124);  // 1/89
+    //         set_single_behavior( pCell , "cycle entry" , 0.0);  // arrest the cell cycle, by default
+    //     }
+    //     return;
+    // }
     return; 
 }
-
-// void custom_function( Cell* pCell, Phenotype& phenotype , double dt )
-// { 
-//     std::cout << __FUNCTION__ << ": " << PhysiCell_globals.current_time << ": cell ID= " << pCell->ID << std::endl;
-//     return; 
-// } 
-
-void contact_function( Cell* pMe, Phenotype& phenoMe , Cell* pOther, Phenotype& phenoOther , double dt )
-{ return; } 
-
-// void double_volume_update_function( Cell* pCell, Phenotype& phenotype , double dt )
-// {
-//     // Warning! Do not use get_total_volume!
-//     // Use (some_cell).phenotype.volume.total instead!
-//     // pCell->set_total_volume( pCell->phenotype.volume.total + pCell->phenotype.volume.total * 0.1);
-//     // if ( get_single_signal( pCell, "pressure" ) < 3.0 )
-//     // {
-//     //     pCell->set_total_volume( pCell->phenotype.volume.total + pCell->phenotype.volume.total * pCell->custom_data["growth_rate"]);
-//     // }
-//     pCell->set_total_volume( pCell->phenotype.volume.total + pCell->phenotype.volume.total * pCell->custom_data["growth_rate"]);
-
-//     // if (pCell->phenotype.volume.total > 1047)    //rwh: hard-coded; fix!
-    // double NormalRandom( double mean, double standard_deviation )
-    // if (pCell->phenotype.volume.total > NormalRandom(2.0, 0.4) * 523.6)    //rwh: hard-coded; fix!
-//     // if (pCell->phenotype.volume.total > NormalRandom(2.0, 1.0) * 523.6)    //rwh: hard-coded; fix!
-//     {
-//         // std::cout << "------- " << __FUNCTION__ << ":  ID= " << pCell->ID <<":  volume.total= " << pCell->phenotype.volume.total << std::endl;
-//         pCell->flag_for_division();
-//     }
-// }
 
 // do every phenotype dt
 // No longer critical assumption that dt_phenotype = 1
@@ -955,75 +1037,26 @@ void custom_volume_function( Cell* pCell, Phenotype& phenotype, double dt )
     }
 
 	static double cycle_duration = parameters.doubles("cycle_duration");  
-    // const double linear_growth_rate = 0.01132;
-    // const double linear_growth_rate = 0.8895;    // 78.54 / 88.3
 
-    // if (pCell->ID >= 0)
-    // {
-    //     std::cout << " -------- "<<__FUNCTION__ << " (every dt_pheno):  t= " << PhysiCell_globals.current_time << ", dt= " << dt << " , cell ID= " << pCell->ID << std::endl;
-    // }
-
-    // pCell->set_total_volume( pCell->phenotype.volume.total + pCell->phenotype.volume.total * pCell->custom_data["growth_rate"]);
     pCell->custom_data["time_in_cycle"] +=  dt;
 
-    // Volume(sphere) = (4/3) * pi * r^3
-    // Area(circle) = pi * r^2
-
-    // We want to update the size of the cell based on its area    <-------------- rwh
-    // pCell->custom_data["cell_area"] +=  pCell->custom_data["growth_rate"];  // * dt_phenotype
-    // pCell->custom_data["cell_area"] +=  dt * pCell->custom_data["growth_rate"];  // * dt_phenotype
-
-    // A = A0 + r * phase, where phase is time since last division
-    // pCell->custom_data["cell_area"] =  pCell->custom_data["cell_area_0"] + linear_growth_rate * pCell->custom_data["time_in_cycle"];  
-
-    // pCell->custom_data["cell_area"] =  pCell->custom_data["cell_area_0"] + pCell->custom_data["growth_rate"] * pCell->custom_data["time_in_cycle"];  
-
-    // 3/17
-    // double cycle_duration = 88.3;
-    // const double cycle_duration = 441.5;   // 5x slower: 5 * 88.3
-    // const double cycle_duration = 178.;   // 5 * 35.5 (latest 11-cell relaxation time 90pct)
-    // const double cycle_duration = 886.5;   // 5x slower: 5 * 177.3  (Chaste  w/ dt_mech=0.001)
-    // const double cycle_duration = 443.5;   // 5x slower: 5 * 88.7  (Chaste  w/ dt_mech=0.002)
     pCell->custom_data["cell_area"] =  pCell->custom_data["cell_area_0"] * (1.0 + pCell->custom_data["time_in_cycle"] / cycle_duration );  
 
     double radius = sqrt(pCell->custom_data["cell_area"] / 3.14159);  // A=pi * r^2 ; r= sqrt(A/pi)
-    // pCell->set_total_volume( pCell->phenotype.volume.total + phenotype_dt * pCell->custom_data["growth_rate"]);
 
     static double four_thirds_pi =  4.188790204786391;
 	double volume = four_thirds_pi * radius * radius * radius;   // Volume(sphere) = (4/3) * pi * r^3
     pCell->set_total_volume( volume );
 
-    // if (pCell->phenotype.volume.total > NormalRandom(2.0, 0.4) * 523.6)    //rwh: hard-coded; fix!
-    // double vol_norm_rand = pCell->custom_data["norm_rand"] * 523.6;
-    // double vol_norm_rand = pCell->custom_data["norm_rand"] * target_volume;
-
     double area_norm_rand = pCell->custom_data["norm_rand"] * target_area; // uh, only changes when norm_rand changes, so at division
 
-    // cell divides when A(t)>=X*pi*R^2
-
-    // pCell->custom_data["cell_radius"] = pCell->phenotype.geometry.radius;
     pCell->custom_data["cell_radius"] = radius;   // r of cell_area
-    // pCell->custom_data["cell_area"] =  3.1415927 * pCell->custom_data["cell_radius"] * pCell->custom_data["cell_radius"];
-    // if (pCell->phenotype.volume.total >= vol_norm_rand)  
+
     if (pCell->custom_data["cell_area"] >= area_norm_rand)  
-    // if (pCell->custom_data["cell_area"] >= 2.0 * pCell->custom_data["cell_area_0"])  // rwh: NO! in sync
-    // if (pCell->custom_data["cell_area"] >= pCell->custom_data["norm_rand"] * pCell->custom_data["cell_area_0"])  // rwh: NO, tiny keep dividing tinier
     {
-        // std::cout << "-- flag for division because vol(total)= " <<  pCell->phenotype.volume.total<< " and vol_norm_rand= " <<  vol_norm_rand << std::endl;
-        // pCell->flag_for_division();
         #pragma omp critical
         {
-            // if (pCell->ID == 0)
-            // {
-            //     std::cout << " --- "<<__FUNCTION__ << " [pre-divide], cell1 ID= " << pCell->ID <<  ":  t= " << PhysiCell_globals.current_time  << ", time_in_cycle= " << pCell->custom_data["time_in_cycle"] << ", norm_rand= " << pCell->custom_data["norm_rand"] << ", area= " << pCell->custom_data["cell_area"] << std::endl;
-            // }
-            // std::cout << "-- pCell->divide() because vol(total)= " <<  pCell->phenotype.volume.total<< " and vol_norm_rand= " <<  vol_norm_rand << std::endl;
             pCell->divide();
-
-            // if (pCell->ID == 0)
-            // {
-            //     std::cout << " --- "<<__FUNCTION__ << " [post-divide], cell1 ID= " << pCell->ID <<  ":  t= " << PhysiCell_globals.current_time  << ", time_in_cycle= " << pCell->custom_data["time_in_cycle"] << ", norm_rand= " << pCell->custom_data["norm_rand"] << ", area= " << pCell->custom_data["cell_area"] << std::endl;
-            // }
         }
     }
 }
